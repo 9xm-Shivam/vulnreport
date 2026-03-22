@@ -1,4 +1,4 @@
-# 🔍 VulnReport AI — AI-Powered Vulnerability Report Generator
+# 🔍 VulnReport — AI-Powered Vulnerability Report Generator
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
 ![Flask](https://img.shields.io/badge/Flask-3.0-black?logo=flask)
@@ -138,4 +138,4 @@ Python 3.10 · Flask 3.0 · Anthropic Claude API · Vanilla JS · Zero frontend 
 ---
 
 ## 👤 Author
-**Shivam Sagore** · [GitHub](https://github.com/9xm-shivam) · [LinkedIn](https://linkedin.com/shivamsagore)
+**Shivam Sagore** · [GitHub](https://github.com/9xm-shivam) · [LinkedIn](https://www.linkedin.com/in/shivam-sagore/)
