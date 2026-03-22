@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>VulnReport AI — Vulnerability Report Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#09100f;--bg2:#0f1a18;--panel:#132320;--border:#1e3530;
+      --accent:#00e5a0;--accent2:#00b87a;--red:#ff4d6a;--yellow:#f5c842;
+      --blue:#41b3ff;--text:#d4ede8;--muted:#4a7a6e;
+      --font:'DM Sans',sans-serif;--mono:'IBM Plex Mono',monospace;
+    }
+    body{
+      background:var(--bg);color:var(--text);font-family:var(--font);
+      min-height:100vh;
+    }
+    /* scanline effect */
+    body::before{
+      content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+      background:repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,229,160,.012) 2px, rgba(0,229,160,.012) 4px
+      );
+    }
+    body::after{
+      content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+      background:radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,229,160,.04) 0%, transparent 60%);
+    }
+
+    /* ── Header ── */
+    header{
+      position:sticky;top:0;z-index:100;
+      background:rgba(9,16,15,.95);backdrop-filter:blur(10px);
+      border-bottom:1px solid var(--border);
+      padding:.9rem 2rem;
+      display:flex;align-items:center;justify-content:space-between;gap:1rem;
+    }
+    .logo{display:flex;align-items:center;gap:.7rem;}
+    .logo-mark{
+      width:34px;height:34px;border-radius:8px;
+      border:1px solid var(--accent);
+      display:grid;place-items:center;
+      font-family:var(--mono);font-size:.85rem;font-weight:600;color:var(--accent);
+    }
+    .logo-text{font-size:1.1rem;font-weight:700;letter-spacing:-.3px;}
+    .logo-text span{color:var(--accent);}
+    .header-tag{
+      font-family:var(--mono);font-size:.68rem;color:var(--muted);
+      border:1px solid var(--border);border-radius:4px;padding:.2rem .6rem;
+    }
+
+    /* ── Layout ── */
+    .main{
+      position:relative;z-index:1;
+      max-width:1100px;margin:0 auto;
+      padding:2rem 1.5rem 4rem;
+      display:grid;grid-template-columns:420px 1fr;gap:2rem;align-items:start;
+    }
+    @media(max-width:860px){.main{grid-template-columns:1fr;}}
+
+    /* ── Input Panel ── */
+    .input-panel{
+      background:var(--panel);border:1px solid var(--border);
+      border-radius:14px;padding:1.5rem;
+      position:sticky;top:80px;
+    }
+    .panel-title{
+      font-family:var(--mono);font-size:.72rem;letter-spacing:2px;
+      text-transform:uppercase;color:var(--accent);margin-bottom:1.25rem;
+      display:flex;align-items:center;gap:.5rem;
+    }
+    .panel-title::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);}
+
+    /* Tabs */
+    .tab-row{display:flex;background:var(--bg2);border-radius:8px;padding:.2rem;gap:.2rem;margin-bottom:1.25rem;}
+    .tab{
+      flex:1;padding:.5rem;border:none;border-radius:6px;cursor:pointer;
+      font-family:var(--font);font-size:.82rem;font-weight:600;
+      color:var(--muted);background:none;transition:all .2s;
+    }
+    .tab.active{background:var(--panel);color:var(--text);}
+
+    /* Fields */
+    .field{margin-bottom:1rem;}
+    label{display:block;font-size:.73rem;font-weight:600;color:var(--muted);
+          text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem;font-family:var(--mono);}
+    input[type=text],textarea{
+      width:100%;background:var(--bg2);border:1px solid var(--border);
+      border-radius:8px;padding:.7rem .9rem;color:var(--text);
+      font-family:var(--mono);font-size:.85rem;outline:none;
+      transition:border-color .2s,box-shadow .2s;
+    }
+    input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,229,160,.08);}
+    textarea{min-height:160px;resize:vertical;line-height:1.5;}
+
+    /* CVE preview badge */
+    .cve-preview{
+      margin-top:.5rem;padding:.5rem .75rem;
+      background:var(--bg2);border:1px solid var(--border);border-radius:6px;
+      font-size:.78rem;display:none;align-items:center;gap:.6rem;flex-wrap:wrap;
+    }
+    .cve-preview.visible{display:flex;}
+
+    /* Example chips */
+    .examples{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem;}
+    .chip{
+      font-family:var(--mono);font-size:.72rem;padding:.25rem .6rem;
+      border:1px solid var(--border);border-radius:4px;
+      color:var(--muted);cursor:pointer;transition:all .2s;background:none;
+    }
+    .chip:hover{border-color:var(--accent);color:var(--accent);}
+
+    /* Generate button */
+    .gen-btn{
+      width:100%;padding:.85rem;border:none;border-radius:9px;cursor:pointer;
+      font-family:var(--font);font-weight:700;font-size:.95rem;
+      background:var(--accent);color:#09100f;
+      transition:all .2s;margin-top:.5rem;
+      display:flex;align-items:center;justify-content:center;gap:.5rem;
+    }
+    .gen-btn:hover{background:var(--accent2);transform:translateY(-1px);}
+    .gen-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+
+    /* ── Report Panel ── */
+    .report-panel{position:relative;z-index:1;}
+
+    .empty-state{
+      background:var(--panel);border:1px dashed var(--border);
+      border-radius:14px;padding:4rem 2rem;text-align:center;
+    }
+    .empty-icon{font-size:2.5rem;margin-bottom:1rem;opacity:.4;}
+    .empty-title{font-size:1rem;font-weight:600;color:var(--muted);margin-bottom:.4rem;}
+    .empty-sub{font-size:.82rem;color:var(--muted);opacity:.7;}
+
+    /* Report card */
+    .report-card{
+      background:var(--panel);border:1px solid var(--border);
+      border-radius:14px;overflow:hidden;
+      animation:fadeIn .4s ease;
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+    /* Report header */
+    .report-header{
+      padding:1.5rem;
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+    }
+    .report-title{font-size:1.2rem;font-weight:700;margin-bottom:.4rem;}
+    .report-meta{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;}
+    .severity-badge{
+      font-family:var(--mono);font-size:.72rem;font-weight:600;
+      padding:.25rem .75rem;border-radius:4px;letter-spacing:.5px;
+    }
+    .sev-critical{background:rgba(255,77,106,.15);border:1px solid rgba(255,77,106,.4);color:var(--red);}
+    .sev-high    {background:rgba(255,140,50,.15); border:1px solid rgba(255,140,50,.4); color:#ff8c32;}
+    .sev-medium  {background:rgba(245,200,66,.15); border:1px solid rgba(245,200,66,.4); color:var(--yellow);}
+    .sev-low     {background:rgba(65,179,255,.15); border:1px solid rgba(65,179,255,.4); color:var(--blue);}
+    .sev-informational{background:rgba(74,122,110,.15);border:1px solid rgba(74,122,110,.4);color:var(--muted);}
+    .cvss-badge{
+      font-family:var(--mono);font-size:.8rem;font-weight:600;
+      color:var(--text);border:1px solid var(--border);
+      padding:.2rem .6rem;border-radius:4px;
+    }
+    .cve-tag{font-family:var(--mono);font-size:.75rem;color:var(--muted);}
+
+    /* Action buttons */
+    .report-actions{display:flex;gap:.5rem;flex-wrap:wrap;}
+    .act-btn{
+      font-size:.78rem;padding:.4rem .85rem;border-radius:6px;border:none;cursor:pointer;
+      font-family:var(--font);font-weight:600;transition:all .2s;
+      display:flex;align-items:center;gap:.35rem;
+    }
+    .act-copy{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.2);color:var(--accent);}
+    .act-copy:hover{background:rgba(0,229,160,.2);}
+    .act-save{background:var(--bg2);border:1px solid var(--border);color:var(--muted);}
+    .act-save:hover{border-color:var(--muted);color:var(--text);}
+
+    /* Report sections */
+    .report-body{padding:1.5rem;display:flex;flex-direction:column;gap:1.25rem;}
+    .section{}
+    .section-label{
+      font-family:var(--mono);font-size:.68rem;letter-spacing:2px;
+      text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;
+      display:flex;align-items:center;gap:.4rem;
+    }
+    .section-label::before{content:'//';opacity:.5;}
+    .section-content{
+      font-size:.88rem;line-height:1.75;color:var(--text);
+      background:var(--bg2);border:1px solid var(--border);
+      border-radius:8px;padding:1rem;
+    }
+    .section-content.mono{font-family:var(--mono);font-size:.82rem;line-height:1.8;}
+
+    /* Affected component pill */
+    .component-pill{
+      display:inline-flex;align-items:center;gap:.4rem;
+      font-family:var(--mono);font-size:.8rem;
+      background:var(--bg2);border:1px solid var(--border);
+      border-radius:6px;padding:.35rem .75rem;color:var(--text);
+    }
+
+    /* References */
+    .ref-list{display:flex;flex-direction:column;gap:.35rem;}
+    .ref-item{
+      font-family:var(--mono);font-size:.78rem;color:var(--blue);
+      text-decoration:none;word-break:break-all;
+    }
+    .ref-item:hover{text-decoration:underline;}
+
+    /* Loading */
+    .loading-card{
+      background:var(--panel);border:1px solid var(--border);
+      border-radius:14px;padding:3rem 2rem;text-align:center;
+    }
+    .loading-bar{
+      width:100%;height:3px;background:var(--border);border-radius:2px;
+      overflow:hidden;margin-bottom:1rem;
+    }
+    .loading-fill{
+      height:100%;width:0%;background:var(--accent);border-radius:2px;
+      animation:loadAnim 2.5s ease-in-out infinite;
+    }
+    @keyframes loadAnim{
+      0%{width:0%;margin-left:0}
+      50%{width:70%;margin-left:0}
+      100%{width:0%;margin-left:100%}
+    }
+    .loading-text{font-family:var(--mono);font-size:.8rem;color:var(--muted);}
+    .loading-steps{margin-top:.75rem;display:flex;flex-direction:column;gap:.3rem;}
+    .loading-step{font-size:.75rem;color:var(--muted);opacity:0;transition:opacity .4s;}
+    .loading-step.show{opacity:1;color:var(--accent);}
+
+    /* Error */
+    .error-box{
+      background:rgba(255,77,106,.07);border:1px solid rgba(255,77,106,.2);
+      border-radius:10px;padding:1rem;font-size:.85rem;color:var(--red);
+      display:flex;align-items:center;gap:.5rem;margin-top:1rem;
+    }
+
+    /* spinner */
+    .spinner{display:inline-block;width:13px;height:13px;
+      border:2px solid rgba(9,16,15,.5);border-top-color:currentColor;
+      border-radius:50%;animation:spin .55s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">AI</div>
+    <div class="logo-text">Vuln<span>Report</span></div>
+  </div>
+  <div class="header-tag">POWERED BY CLAUDE AI</div>
+</header>
+
+<div class="main">
+
+  <!-- ── Input Panel ── -->
+  <div class="input-panel">
+    <div class="panel-title">Input</div>
+
+    <div class="tab-row">
+      <button class="tab active" id="tab-cve"  onclick="setTab('cve')">CVE Lookup</button>
+      <button class="tab"        id="tab-scan" onclick="setTab('scan')">Scan Output</button>
+    </div>
+
+    <!-- CVE form -->
+    <div id="form-cve">
+      <div class="field">
+        <label>CVE Identifier</label>
+        <input type="text" id="cve-input" placeholder="e.g. CVE-2021-44228"
+               oninput="onCveInput(this.value)"
+               onkeydown="if(event.key==='Enter')generate()"/>
+        <div class="cve-preview" id="cve-preview">
+          <span id="preview-sev" class="severity-badge">—</span>
+          <span id="preview-title" style="font-size:.8rem;color:var(--muted)">Looking up…</span>
+        </div>
+      </div>
+      <div class="examples">
+        <span style="font-size:.72rem;color:var(--muted);align-self:center;">Try:</span>
+        <button class="chip" onclick="useCve('CVE-2021-44228')">Log4Shell</button>
+        <button class="chip" onclick="useCve('CVE-2017-0144')">EternalBlue</button>
+        <button class="chip" onclick="useCve('CVE-2014-0160')">Heartbleed</button>
+        <button class="chip" onclick="useCve('CVE-2021-34527')">PrintNightmare</button>
+      </div>
+    </div>
+
+    <!-- Scan form -->
+    <div id="form-scan" style="display:none;">
+      <div class="field">
+        <label>Paste Scan Output</label>
+        <textarea id="scan-input" placeholder="Paste Nmap, Nessus, or any scanner output here..."></textarea>
+      </div>
+      <div class="examples">
+        <span style="font-size:.72rem;color:var(--muted);align-self:center;">Load sample:</span>
+        <button class="chip" onclick="loadSample('nmap')">Nmap sample</button>
+        <button class="chip" onclick="loadSample('nessus')">Nessus sample</button>
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:1rem;">
+      <label>Target Description <span style="opacity:.5;">(optional)</span></label>
+      <input type="text" id="target-input" placeholder="e.g. Production web server, Internal HR system"/>
+    </div>
+
+    <button class="gen-btn" id="gen-btn" onclick="generate()">
+      <span>Generate Report</span>
+    </button>
+    <div id="input-error"></div>
+  </div>
+
+  <!-- ── Report Panel ── -->
+  <div class="report-panel" id="report-panel">
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">📋</div>
+      <div class="empty-title">No report generated yet</div>
+      <div class="empty-sub">Enter a CVE ID or paste scan output on the left</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /* ── Tab switching ── */
+  function setTab(t) {
+    document.getElementById('tab-cve').classList.toggle('active', t==='cve');
+    document.getElementById('tab-scan').classList.toggle('active', t==='scan');
+    document.getElementById('form-cve').style.display  = t==='cve'  ? '' : 'none';
+    document.getElementById('form-scan').style.display = t==='scan' ? '' : 'none';
+  }
+
+  /* ── CVE quick lookup ── */
+  let cveTimer = null;
+  function onCveInput(val) {
+    const preview = document.getElementById('cve-preview');
+    clearTimeout(cveTimer);
+    const cve = val.trim().toUpperCase();
+    if (!/^CVE-\d{4}-\d{4,}$/.test(cve)) { preview.classList.remove('visible'); return; }
+    preview.classList.add('visible');
+    document.getElementById('preview-title').textContent = 'Looking up…';
+    document.getElementById('preview-sev').className     = 'severity-badge';
+    cveTimer = setTimeout(() => fetchCvePreview(cve), 800);
+  }
+
+  async function fetchCvePreview(cveId) {
+    try {
+      const r = await fetch('/api/cve-info', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({cve_id: cveId})
+      });
+      const d = await r.json();
+      document.getElementById('preview-title').textContent = d.title || cveId;
+      const sev = document.getElementById('preview-sev');
+      sev.textContent  = `${d.severity || '?'}  ${d.cvss_score ? '· CVSS '+d.cvss_score : ''}`;
+      sev.className    = 'severity-badge ' + sevClass(d.severity);
+    } catch(e) {}
+  }
+
+  function useCve(cve) {
+    document.getElementById('cve-input').value = cve;
+    onCveInput(cve);
+  }
+
+  /* ── Sample scan data ── */
+  const SAMPLES = {
+    nmap: `Starting Nmap 7.93 scan
+Host: 192.168.1.105 (webserver.local)
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.10
+80/tcp   open  http    Apache httpd 2.4.18
+443/tcp  open  https   Apache httpd 2.4.18
+445/tcp  open  msrpc   Microsoft Windows RPC
+8080/tcp open  http    Apache Tomcat 9.0.31
+
+Script output:
+| smb-vuln-ms17-010:
+|   VULNERABLE:
+|   Remote Code Execution vulnerability in Microsoft SMBv1
+|     State: VULNERABLE
+|     IDs: CVE-2017-0144
+|     Risk factor: HIGH`,
+
+    nessus: `Nessus Scan Results
+Plugin ID: 97833
+Plugin Name: MS17-010: Security Update for Windows SMB Server
+Severity: CRITICAL
+CVE: CVE-2017-0144
+CVSS Score: 9.3
+Description: The remote Windows host is affected by a remote
+code execution vulnerability in the SMBv1 server.
+Solution: Microsoft has released a set of patches for Windows.
+Apply security update MS17-010.`
+  };
+
+  function loadSample(type) {
+    document.getElementById('scan-input').value = SAMPLES[type];
+    setTab('scan');
+  }
+
+  /* ── Generate report ── */
+  async function generate() {
+    const tab    = document.getElementById('tab-cve').classList.contains('active') ? 'cve' : 'scan';
+    const content = tab === 'cve'
+      ? document.getElementById('cve-input').value.trim()
+      : document.getElementById('scan-input').value.trim();
+    const target = document.getElementById('target-input').value.trim() || 'Target System';
+
+    if (!content) {
+      showInputError(tab==='cve' ? 'Enter a CVE ID.' : 'Paste scan output first.');
+      return;
+    }
+
+    document.getElementById('input-error').innerHTML = '';
+    setLoading(true);
+    showLoading();
+
+    try {
+      const r = await fetch('/api/generate', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({input_type: tab, content, target})
+      });
+      const d = await r.json();
+      if (!d.success) { showError(d.error || 'Generation failed.'); return; }
+      renderReport(d.report);
+    } catch(e) {
+      showError('Server error — is the app running?');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* ── Loading state ── */
+  const LOADING_MSGS = [
+    'Analysing vulnerability data…',
+    'Researching CVE details…',
+    'Assessing risk and impact…',
+    'Writing remediation steps…',
+    'Formatting report…'
+  ];
+
+  function showLoading() {
+    const panel = document.getElementById('report-panel');
+    panel.innerHTML = `
+      <div class="loading-card">
+        <div class="loading-bar"><div class="loading-fill"></div></div>
+        <div class="loading-text">Claude AI is generating your report…</div>
+        <div class="loading-steps" id="loading-steps">
+          ${LOADING_MSGS.map((m,i)=>`<div class="loading-step" id="ls-${i}">▸ ${m}</div>`).join('')}
+        </div>
+      </div>`;
+
+    let step = 0;
+    const interval = setInterval(() => {
+      if (step < LOADING_MSGS.length) {
+        document.getElementById(`ls-${step}`)?.classList.add('show');
+        step++;
+      } else clearInterval(interval);
+    }, 500);
+  }
+
+  function setLoading(loading) {
+    const btn = document.getElementById('gen-btn');
+    btn.disabled  = loading;
+    btn.innerHTML = loading
+      ? `<span class="spinner"></span> Generating…`
+      : `<span>Generate Report</span>`;
+  }
+
+  /* ── Render report ── */
+  function sevClass(s) {
+    const m = {Critical:'sev-critical',High:'sev-high',Medium:'sev-medium',Low:'sev-low'};
+    return m[s] || 'sev-informational';
+  }
+
+  function renderReport(r) {
+    const refs = (r.references || []).map(ref =>
+      `<a class="ref-item" href="${ref}" target="_blank" rel="noopener">${ref}</a>`
+    ).join('');
+
+    document.getElementById('report-panel').innerHTML = `
+      <div class="report-card">
+        <div class="report-header">
+          <div>
+            <div class="report-title">${r.title}</div>
+            <div class="report-meta">
+              <span class="severity-badge ${sevClass(r.severity)}">${r.severity}</span>
+              <span class="cvss-badge">CVSS ${r.cvss_score}</span>
+              <span class="cve-tag">${r.cve_id}</span>
+            </div>
+          </div>
+          <div class="report-actions">
+            <button class="act-btn act-copy" onclick="copyReport()">📋 Copy</button>
+            <button class="act-btn act-save" onclick="saveReport()">💾 Save .txt</button>
+          </div>
+        </div>
+
+        <div class="report-body">
+
+          <div class="section">
+            <div class="section-label">Affected Component</div>
+            <div><span class="component-pill">⚙ ${r.affected_component}</span></div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">Executive Summary</div>
+            <div class="section-content">${r.executive_summary}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">Technical Details</div>
+            <div class="section-content">${r.technical_details}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">Attack Scenario</div>
+            <div class="section-content mono">${formatSteps(r.attack_scenario)}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">Business & Technical Impact</div>
+            <div class="section-content">${r.impact.replace(/\n/g,'<br/>')}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">Remediation Steps</div>
+            <div class="section-content mono">${formatSteps(r.remediation)}</div>
+          </div>
+
+          ${refs ? `
+          <div class="section">
+            <div class="section-label">References & Advisories</div>
+            <div class="section-content">
+              <div class="ref-list">${refs}</div>
+            </div>
+          </div>` : ''}
+
+        </div>
+      </div>`;
+
+    // store for export
+    window._lastReport = r;
+  }
+
+  function formatSteps(text) {
+    return (text || '').split('\n').filter(Boolean)
+      .map(l => `<div style="margin-bottom:.3rem">${l}</div>`)
+      .join('');
+  }
+
+  /* ── Export ── */
+  function buildReportText(r) {
+    return [
+      `VULNERABILITY REPORT`,
+      `Generated by VulnReport AI`,
+      `${'='.repeat(60)}`,
+      ``,
+      `TITLE:     ${r.title}`,
+      `CVE:       ${r.cve_id}`,
+      `SEVERITY:  ${r.severity}`,
+      `CVSS:      ${r.cvss_score}`,
+      `TARGET:    ${r.target}`,
+      `COMPONENT: ${r.affected_component}`,
+      ``,
+      `EXECUTIVE SUMMARY`,
+      `-`.repeat(40),
+      r.executive_summary,
+      ``,
+      `TECHNICAL DETAILS`,
+      `-`.repeat(40),
+      r.technical_details,
+      ``,
+      `ATTACK SCENARIO`,
+      `-`.repeat(40),
+      r.attack_scenario,
+      ``,
+      `IMPACT`,
+      `-`.repeat(40),
+      r.impact,
+      ``,
+      `REMEDIATION`,
+      `-`.repeat(40),
+      r.remediation,
+      ``,
+      `REFERENCES`,
+      `-`.repeat(40),
+      (r.references || []).join('\n'),
+    ].join('\n');
+  }
+
+  function copyReport() {
+    if (!window._lastReport) return;
+    navigator.clipboard.writeText(buildReportText(window._lastReport))
+      .then(() => {
+        const btn = document.querySelector('.act-copy');
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => btn.textContent = '📋 Copy', 2000);
+      });
+  }
+
+  function saveReport() {
+    if (!window._lastReport) return;
+    const r    = window._lastReport;
+    const text = buildReportText(r);
+    const blob = new Blob([text], {type:'text/plain'});
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = `${(r.cve_id||'report').replace(/[^a-z0-9]/gi,'_')}_report.txt`;
+    a.click();
+  }
+
+  /* ── Errors ── */
+  function showInputError(msg) {
+    document.getElementById('input-error').innerHTML =
+      `<div class="error-box">⚠ ${msg}</div>`;
+  }
+
+  function showError(msg) {
+    document.getElementById('report-panel').innerHTML =
+      `<div class="error-box" style="margin:0">⚠ ${msg}</div>`;
+  }
+</script>
+</body>
+</html>
