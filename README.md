@@ -6,6 +6,8 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 > Enter a CVE ID or paste raw Nmap/Nessus scan output — Claude AI instantly generates a professional penetration testing report with severity rating, technical analysis, attack scenarios, and remediation steps.
+> <img width="1868" height="971" alt="image" src="https://github.com/user-attachments/assets/15d3bacd-1253-4c37-977a-338d7bceaa6b" />
+
 
 ---
 
