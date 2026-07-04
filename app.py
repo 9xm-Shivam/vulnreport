@@ -1,5 +1,5 @@
 """
-app.py — VulnReport AI (Groq Edition — FREE)
+app.py — VulnReport AI (Google Gemini Edition — 100% FREE)
 """
 
 import os
@@ -24,9 +24,11 @@ def api_generate():
     if not content:
         return jsonify({"error": "No input provided."}), 400
 
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        return jsonify({"error": "GROQ_API_KEY not set. See setup instructions in README."}), 500
+        return jsonify({
+            "error": "GEMINI_API_KEY not set. Get your free key at https://aistudio.google.com/app/apikey"
+        }), 500
 
     try:
         report = generate_report(
@@ -44,7 +46,7 @@ def api_generate():
 def api_cve_info():
     data    = request.get_json() or {}
     cve_id  = data.get("cve_id", "").strip().upper()
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
 
     if not cve_id:
         return jsonify({"error": "No CVE ID provided."}), 400
@@ -57,11 +59,11 @@ def api_cve_info():
 
 
 if __name__ == "__main__":
-    if not os.environ.get("GROQ_API_KEY"):
-        print("\n⚠️  Set your FREE Groq API key first:")
-        print("   Get it at: https://console.groq.com")
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("\n⚠️  Set your FREE Gemini API key first:")
+        print("   Get it at: https://aistudio.google.com/app/apikey")
         print("")
-        print("   PowerShell: $env:GROQ_API_KEY='your-key-here'")
-        print("   CMD:        set GROQ_API_KEY=your-key-here\n")
+        print("   PowerShell: $env:GEMINI_API_KEY='your-key-here'")
+        print("   CMD:        set GEMINI_API_KEY=your-key-here\n")
     print("🔍 VulnReport AI running at http://localhost:5002\n")
     app.run(debug=True, host="0.0.0.0", port=5002)
