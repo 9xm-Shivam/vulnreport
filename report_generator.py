@@ -1,18 +1,22 @@
 """
 report_generator.py
 ─────────────────────────────────────────────────────────────────────────────
-Core AI module — uses Groq API (FREE, no credit card required).
+Core AI module — uses Google Gemini API (FREE, no credit card required).
 
-Groq runs Llama 3 — a powerful open-source model by Meta.
-API is completely free with generous rate limits.
+Model: gemini-1.5-flash (free tier)
+  - 15 requests per minute
+  - 1 million tokens per minute
+  - 1500 requests per day
+  - Completely free, no billing needed
 
-Get your free key at: https://console.groq.com
+Get your free key at: https://aistudio.google.com/app/apikey
 
 Interview explanation:
-  "I used the Groq API which runs Meta's Llama 3 model. I send a
-   structured prompt asking it to act as a penetration tester and
-   return a JSON report. Groq is free and extremely fast — it can
-   generate responses in under 2 seconds."
+  "I use the Google Gemini API which is completely free. I send the
+   CVE data with a structured prompt asking it to act as a penetration
+   tester and return a JSON report. The key skill here is prompt
+   engineering — designing the right instructions to get consistent,
+   accurate output every time."
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -22,8 +26,7 @@ import urllib.request
 import urllib.error
 
 
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL        = "llama-3.3-70b-versatile"   # Much larger, more accurate — still free on Groq
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 
 # ── System prompt ──────────────────────────────────────────────────────────────
@@ -48,39 +51,46 @@ Return ONLY a valid JSON object with exactly these fields — no markdown, no ex
   "cvss_score": "Official CVSS v3 base score as string e.g. 9.8",
   "cve_id": "CVE-XXXX-XXXXX or N/A",
   "affected_component": "Exact software name and affected versions",
-  "executive_summary": "3 sentences. What is vulnerable, what can an attacker do, what is the business risk. Plain English for a non-technical manager.",
-  "technical_details": "4 sentences. Root cause of the vulnerability, the attack vector, authentication requirements, and what privileges an attacker gains.",
-  "attack_scenario": "Numbered realistic attack steps. Each step on a new line starting with the number. E.g.: 1. Attacker scans for vulnerable hosts\\n2. Sends crafted payload\\n3. Gains remote code execution",
-  "impact": "Bullet points of impact. Each on a new line starting with a dash. E.g.: - Full system compromise\\n- Data exfiltration\\n- Lateral movement",
-  "remediation": "Numbered specific fix steps with patch versions where applicable. Each step on a new line. E.g.: 1. Apply patch CVE-XXXX-XXXX\\n2. Upgrade to version X.X.X\\n3. Enable firewall rule",
-  "references": ["Official NVD URL", "Vendor advisory URL", "Exploit DB or MITRE URL"]
+  "executive_summary": "3 sentences. What is vulnerable, what can an attacker do, what is the business risk.",
+  "technical_details": "4 sentences. Root cause, attack vector, authentication requirements, privileges gained.",
+  "attack_scenario": "Numbered steps. Each step on new line e.g. 1. Step one\\n2. Step two\\n3. Step three",
+  "impact": "Bullet points each on new line e.g. - Impact one\\n- Impact two\\n- Impact three",
+  "remediation": "Numbered fix steps e.g. 1. Fix one\\n2. Fix two\\n3. Fix three",
+  "references": ["URL1", "URL2", "URL3"]
 }"""
 
 
-def _call_groq(prompt: str, api_key: str) -> str:
+def _call_gemini(prompt: str, api_key: str) -> str:
     """
-    Make a POST request to Groq API.
+    Make a POST request to Google Gemini API.
 
-    Groq uses the same format as OpenAI's API —
-    a messages array with role and content.
+    Interview explanation:
+      "Gemini uses a slightly different API format than OpenAI —
+       instead of a messages array it uses a contents array with
+       parts. But the concept is the same — you send a prompt and
+       get a response back."
     """
+    url = f"{GEMINI_API_URL}?key={api_key}"
+
     payload = json.dumps({
-        "model":       MODEL,
-        "max_tokens":  1500,
-        "temperature": 0.3,   # Lower = more consistent/factual output
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
-        ],
+        "system_instruction": {
+            "parts": [{"text": SYSTEM_PROMPT}]
+        },
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature":     0.2,
+            "maxOutputTokens": 1500,
+        }
     }).encode("utf-8")
 
     req = urllib.request.Request(
-        GROQ_API_URL,
+        url,
         data    = payload,
         headers = {
-            "Content-Type":  "application/json",
-            "Authorization": f"Bearer {api_key}",
-            "User-Agent":    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Content-Type": "application/json",
+            "User-Agent":   "VulnReport-AI/1.0",
         },
         method = "POST",
     )
@@ -88,10 +98,10 @@ def _call_groq(prompt: str, api_key: str) -> str:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-            return body["choices"][0]["message"]["content"]
+            return body["candidates"][0]["content"]["parts"][0]["text"]
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")
-        raise ValueError(f"Groq API error {e.code}: {error_body}")
+        raise ValueError(f"Gemini API error {e.code}: {error_body}")
 
 
 def _parse_report(raw: str) -> dict:
@@ -102,20 +112,18 @@ def _parse_report(raw: str) -> dict:
     # Strip markdown code fences if present
     cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
 
-    # Remove invalid control characters that break json.loads
-    # (AI sometimes puts literal newlines inside JSON string values)
+    # Remove invalid control characters
     cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', cleaned)
 
-    # Replace unescaped newlines inside JSON strings with \\n
-    # This fixes cases where the model writes real newlines in string values
+    # Fix unescaped newlines inside JSON strings
     def fix_newlines(m):
         return m.group(0).replace('\n', '\\n').replace('\r', '')
-    cleaned = re.sub(r'"[^"\\]*(?:\\.[^"\\]*)*"', fix_newlines, cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r'"[^"\\]*(?:\\.[^"\\]*)*"',
+                     fix_newlines, cleaned, flags=re.DOTALL)
 
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
-        # Last resort: extract JSON object
         match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if match:
             try:
@@ -141,11 +149,11 @@ def _parse_report(raw: str) -> dict:
 def generate_report(input_type: str, content: str,
                     target: str, api_key: str) -> dict:
     """
-    Build the prompt and call Groq API.
+    Build prompt and call Gemini API.
 
     Two modes:
       cve  → analyse a specific CVE ID
-      scan → analyse raw scanner output and find worst vulnerability
+      scan → analyse raw scanner output
     """
     if input_type == "cve":
         prompt = f"""Generate an accurate penetration testing report for this CVE.
@@ -159,7 +167,7 @@ Use the official NVD data for this CVE. Be technically precise about:
 - How the vulnerability is actually exploited
 - The specific patches or mitigations available
 
-Return the JSON report as specified."""
+Return the JSON report as specified in your instructions."""
 
     else:
         prompt = f"""Analyse this security scan output from a penetration test.
@@ -173,10 +181,9 @@ Scan Output:
 Identify the worst vulnerability, map it to its CVE if possible, and generate
 an accurate technical report. Return the JSON report as specified."""
 
-    raw    = _call_groq(prompt, api_key)
+    raw    = _call_gemini(prompt, api_key)
     report = _parse_report(raw)
 
-    # Add metadata
     report["input_type"] = input_type
     report["target"]     = target
 
@@ -184,18 +191,16 @@ an accurate technical report. Return the JSON report as specified."""
 
 
 def get_cve_context(cve_id: str, api_key: str) -> dict:
-    """
-    Quick CVE preview — just title + severity + CVSS before full report.
-    """
+    """Quick CVE preview — title, severity, CVSS before full report."""
     if not api_key:
         return {"title": cve_id, "severity": "Unknown", "cvss_score": "N/A"}
 
     prompt = f"""For {cve_id}, return ONLY a JSON object with three fields:
 {{"title": "short vulnerability name", "severity": "Critical or High or Medium or Low", "cvss_score": "e.g. 9.8"}}
-No other text. No markdown."""
+No other text. No markdown. No code blocks."""
 
     try:
-        raw  = _call_groq(prompt, api_key)
+        raw  = _call_gemini(prompt, api_key)
         data = _parse_report(raw)
         return {
             "title":      data.get("title",      cve_id),
